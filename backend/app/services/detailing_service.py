@@ -447,33 +447,81 @@ class BeamDetailingService:
     
     def _calculate_prohibited_zones(self, coordinates: Dict, beam_data: Dict) -> List[ProhibitedZone]:
         """Calcula zonas donde no se permiten empalmes según NSR-10 C.21.5.3.2"""
-        zones = []
+        zones: List[ProhibitedZone] = []
         d = beam_data.get('effective_depth_m', 0.5)
-        
-        for face in coordinates['faces']:
-            if face['type'] == 'support_face':
-                support_half_width = face['width'] / 2
-                prohibited_distance = max(2 * d, support_half_width)
-                
-                # No permitir que la zona se extienda más allá del centro de la luz adyacente
-                end_limit = coordinates['total_length']
-                for span in coordinates['spans']:
-                    if abs(span['start'] - face['x']) < 0.01:  # Luz después de este apoyo
-                        end_limit = min(end_limit, span['start'] + span['length'] / 2)
-                        break
-                
-                zone_end = min(face['x'] + prohibited_distance, end_limit)
-                
-                if zone_end > face['x']:  # Solo crear zona si tiene longitud
-                    zone = ProhibitedZone(
-                        start_m=face['x'],
-                        end_m=zone_end,
+        faces = coordinates.get('faces', [])
+        spans = coordinates.get('spans', [])
+        total_supports = len(faces)
+
+        for face in faces:
+            if face.get('type') != 'support_face':
+                continue
+
+            support_index = face.get('support_index', 0)
+            support_width = face.get('width', 0.0)
+            support_start = face.get('x', 0.0)
+            support_end = support_start + support_width
+            support_half_width = support_width / 2
+            prohibited_distance = max(2 * d, support_half_width)
+            label = face.get('label') or f"Eje {support_index + 1}"
+            is_first = support_index == 0
+            is_last = support_index == total_supports - 1
+
+            # Zona correspondiente al propio apoyo
+            if support_end - support_start > 0:
+                zones.append(
+                    ProhibitedZone(
+                        start_m=support_start,
+                        end_m=support_end,
                         type='no_splice_zone',
-                        description=f"No empalmar: {prohibited_distance*100:.0f} cm desde {face.get('label', f'Eje {face['support_index']+1}')}",
-                        support_index=face['support_index']
+                        description=f"No empalmar dentro del apoyo {label} (ancho {support_width*100:.0f} cm)",
+                        support_index=support_index,
                     )
-                    zones.append(zone)
-        
+                )
+
+            # Zona posterior (solo si no es el apoyo final)
+            if not is_last:
+                right_limit = coordinates.get('total_length', support_end)
+                for span in spans:
+                    if abs(span.get('start', -999) - support_end) < 0.01:
+                        right_limit = min(right_limit, span['start'] + span.get('length', 0) / 2)
+                        break
+
+                zone_start = support_end
+                zone_end = min(support_end + prohibited_distance, right_limit)
+                if zone_end > zone_start:
+                    zones.append(
+                        ProhibitedZone(
+                            start_m=zone_start,
+                            end_m=zone_end,
+                            type='no_splice_zone',
+                            description=f"No empalmar: {prohibited_distance*100:.0f} cm después de {label}",
+                            support_index=support_index,
+                        )
+                    )
+
+            # Zona anterior (solo si no es el primer apoyo)
+            if not is_first:
+                left_limit = 0.0
+                for span in spans:
+                    if abs(span.get('end', -999) - support_start) < 0.01:
+                        left_limit = max(left_limit, span['end'] - span.get('length', 0) / 2)
+                        break
+
+                zone_start = max(support_start - prohibited_distance, left_limit)
+                zone_end = support_start
+                if zone_start < zone_end:
+                    zones.append(
+                        ProhibitedZone(
+                            start_m=zone_start,
+                            end_m=zone_end,
+                            type='no_splice_zone',
+                            description=f"No empalmar: {prohibited_distance*100:.0f} cm antes de {label}",
+                            support_index=support_index,
+                        )
+                    )
+
+        zones.sort(key=lambda z: z.start_m)
         return zones
     
     def _calculate_development_lengths(self, beam_data: Dict) -> Dict[str, float]:
@@ -514,6 +562,7 @@ class BeamDetailingService:
         top_bars = beam_data.get('top_bars', [])
         max_length = beam_data.get('max_bar_length_m', 12.0)
         hook_type = beam_data.get('hook_type', '135')
+        edge_cover = beam_data.get('edge_cover_m', self.min_edge_cover_m)
         
         if not top_bars:
             return bars
@@ -556,6 +605,9 @@ class BeamDetailingService:
                     max_length=max_length,
                     splice_length=dev_info['splice'],
                     prohibited_zones=prohibited_zones,
+                    hook_length=self._get_single_hook_length(diameter, hook_type),
+                    edge_cover=edge_cover,
+                    beam_length=coordinates['total_length'],
                 )
                 bars.extend(segments)
             
@@ -583,6 +635,7 @@ class BeamDetailingService:
         bottom_bars = beam_data.get('bottom_bars', [])
         max_length = beam_data.get('max_bar_length_m', 12.0)
         hook_type = beam_data.get('hook_type', '135')
+        edge_cover = beam_data.get('edge_cover_m', self.min_edge_cover_m)
         
         if not bottom_bars:
             return bars
@@ -599,21 +652,25 @@ class BeamDetailingService:
             # Barras continuas
             for i in range(continuous_count):
                 bar_id = f"B{diameter.replace('#', '')}-C{i+1:02d}"
-                splices = self._calculate_splices(
-                    total_length=coordinates['total_length'],
-                    max_bar_length=max_length,
+                total_length = coordinates['total_length']
+                splices = self._build_bottom_splice_plan(
+                    total_length=total_length,
+                    splice_length=dev_info['splice'],
                     prohibited_zones=prohibited_zones,
-                    splice_length=dev_info['splice']
+                    max_bar_length=max_length,
+                    bar_index=i,
                 )
+                offset_ratio_groups = [0.08, 0.16, 0.24]
+                splice_offset_ratio = offset_ratio_groups[i % len(offset_ratio_groups)]
                 
                 bar = RebarDetail(
                     id=bar_id,
                     diameter=diameter,
                     position='bottom',
                     type='continuous',
-                    length_m=coordinates['total_length'],
+                    length_m=total_length,
                     start_m=0.0,
-                    end_m=coordinates['total_length'],
+                    end_m=total_length,
                     splices=splices,
                     hook_type=hook_type,
                     quantity=1,
@@ -625,6 +682,11 @@ class BeamDetailingService:
                     max_length=max_length,
                     splice_length=dev_info['splice'],
                     prohibited_zones=prohibited_zones,
+                    hook_length=self._get_single_hook_length(diameter, hook_type),
+                    edge_cover=edge_cover,
+                    beam_length=coordinates['total_length'],
+                    prefer_previous_zone=True,
+                    splice_offset_ratio=splice_offset_ratio,
                 )
                 bars.extend(segments)
             
@@ -707,6 +769,121 @@ class BeamDetailingService:
         
         return splices if splices else None
 
+    def _build_bottom_splice_plan(
+        self,
+        *,
+        total_length: float,
+        splice_length: float,
+        prohibited_zones: List[ProhibitedZone],
+        max_bar_length: float,
+        bar_index: int,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Genera una lista de empalmes desplazados para barras inferiores continuas."""
+        if splice_length <= 0:
+            return None
+
+        possible_positions = [0.25, 0.33, 0.40, 0.50, 0.60, 0.67, 0.75]
+        pattern_map = {
+            0: [1, 5],  # 33% y 67%
+            1: [2, 4],  # 40% y 60%
+            2: [0, 3],  # 25% y 50%
+        }
+        group = bar_index % len(pattern_map)
+        indices = pattern_map[group]
+        splices: List[Dict[str, Any]] = []
+
+        for idx in indices:
+            if idx >= len(possible_positions):
+                continue
+            center_ratio = possible_positions[idx]
+            center = total_length * center_ratio
+            if self._is_in_prohibited_zone(center, prohibited_zones, splice_length):
+                continue
+            splice_start = max(0.0, center - splice_length / 2)
+            splice_end = min(total_length, center + splice_length / 2)
+            if splice_end - splice_start >= splice_length * 0.8:
+                splices.append(
+                    {
+                        "start": splice_start,
+                        "end": splice_end,
+                        "length": splice_end - splice_start,
+                        "type": "lap_splice_class_b",
+                        "offset_group": group,
+                    }
+                )
+
+        if splices:
+            return splices
+
+        offset_factor = 0.08 + 0.04 * group
+        fallback = self._calculate_splices_with_offset(
+            total_length=total_length,
+            max_bar_length=max_bar_length,
+            prohibited_zones=prohibited_zones,
+            splice_length=splice_length,
+            offset_factor=offset_factor,
+        )
+        return fallback
+
+    def _calculate_splices_with_offset(
+        self,
+        *,
+        total_length: float,
+        max_bar_length: float,
+        prohibited_zones: List[ProhibitedZone],
+        splice_length: float,
+        offset_factor: float = 0.0,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Calcula empalmes aplicando un desplazamiento progresivo para evitar coincidencias."""
+        if total_length <= max_bar_length or splice_length <= 0:
+            return None
+
+        num_pieces = math.ceil(total_length / max_bar_length)
+        if num_pieces <= 1:
+            return None
+
+        base_piece_length = total_length / num_pieces
+        bounded_offset_factor = max(-0.5, min(offset_factor, 0.5))
+        offset_per_joint = base_piece_length * bounded_offset_factor
+
+        splices: List[Dict[str, Any]] = []
+        for i in range(1, num_pieces):
+            splice_center = i * base_piece_length + offset_per_joint * i
+            splice_center = max(splice_length / 2, min(splice_center, total_length - splice_length / 2))
+
+            if self._is_in_prohibited_zone(splice_center, prohibited_zones, splice_length):
+                continue
+
+            splice_start = max(0.0, splice_center - splice_length / 2)
+            splice_end = min(total_length, splice_center + splice_length / 2)
+            if splice_end - splice_start >= splice_length * 0.8:
+                splices.append(
+                    {
+                        "start": splice_start,
+                        "end": splice_end,
+                        "length": splice_end - splice_start,
+                        "type": "lap_splice_class_b",
+                        "offset_applied": round(bounded_offset_factor, 3),
+                    }
+                )
+
+        return splices if splices else None
+
+    @staticmethod
+    def _is_in_prohibited_zone(
+        position: float,
+        prohibited_zones: List[ProhibitedZone],
+        splice_length: float,
+    ) -> bool:
+        splice_start = position - splice_length / 2
+        splice_end = position + splice_length / 2
+        for zone in prohibited_zones:
+            if zone.start_m <= position <= zone.end_m:
+                return True
+            if splice_start < zone.end_m and splice_end > zone.start_m:
+                return True
+        return False
+
     def _split_bar_by_max_length(
         self,
         bar: RebarDetail,
@@ -714,6 +891,11 @@ class BeamDetailingService:
         max_length: float,
         splice_length: float,
         prohibited_zones: List[ProhibitedZone],
+        hook_length: float,
+        edge_cover: float,
+        beam_length: float,
+        prefer_previous_zone: bool = False,
+        splice_offset_ratio: float = 0.0,
     ) -> List[RebarDetail]:
         """Segmenta una barra en piezas que respetan la longitud comercial máxima."""
         if max_length <= 0 or bar.length_m <= max_length:
@@ -728,15 +910,92 @@ class BeamDetailingService:
             )
             return [bar]
 
+        cover = max(self.min_edge_cover_m, edge_cover or 0.0)
+        tolerance = 1e-3
+        has_start_hook = bool(hook_length and bar.start_m <= cover + tolerance)
+        has_end_hook = bool(
+            hook_length and bar.end_m >= beam_length - cover - tolerance
+        )
+
         segments: List[RebarDetail] = []
         joints: List[Dict[str, Any]] = []
         current_start = bar.start_m
         piece_index = 1
         safety_counter = 0
+        offset_applied = False
+        offset_ratio = splice_offset_ratio if splice_offset_ratio else 0.0
+        offset_ratio = max(0.0, min(offset_ratio, 0.6))
 
         while current_start < bar.end_m - 1e-6 and safety_counter < 100:
             safety_counter += 1
-            segment_end = min(current_start + max_length, bar.end_m)
+            remaining_length = max(bar.end_m - current_start, 0.0)
+            if remaining_length <= 0:
+                break
+
+            hook_deduction = 0.0
+            if has_start_hook and piece_index == 1:
+                hook_deduction += hook_length
+            if has_end_hook and remaining_length <= max_length + tolerance:
+                hook_deduction += hook_length
+
+            usable_max = max_length - hook_deduction
+            if usable_max <= 0:
+                logger.warning(
+                    "La barra %s no puede segmentarse porque los ganchos consumen la longitud máxima",
+                    bar.id,
+                )
+                usable_max = max_length
+
+            segment_length = min(usable_max, remaining_length)
+            candidate_end = current_start + segment_length
+
+            if (
+                offset_ratio > 1e-3
+                and not offset_applied
+                and piece_index == 1
+                and segment_length > splice_length + tolerance
+            ):
+                offset_length = min(
+                    segment_length * offset_ratio,
+                    max(segment_length - splice_length - tolerance, 0.0),
+                )
+                if offset_length > tolerance:
+                    candidate_end -= offset_length
+                    if candidate_end <= current_start + splice_length + tolerance:
+                        candidate_end = current_start + splice_length + tolerance
+                    offset_applied = True
+
+            is_last_segment = candidate_end >= bar.end_m - tolerance
+
+            if (
+                prefer_previous_zone
+                and not is_last_segment
+                and splice_length > 0
+            ):
+                joint_start_candidate = max(bar.start_m, candidate_end - splice_length)
+                remaining_after_joint = bar.end_m - joint_start_candidate
+                if remaining_after_joint <= max_length + tolerance:
+                    preferred_end = self._prefer_splice_in_previous_corridor(
+                        current_start=current_start,
+                        joint_start=joint_start_candidate,
+                        candidate_end=candidate_end,
+                        splice_length=splice_length,
+                        prohibited_zones=prohibited_zones,
+                    )
+                    if preferred_end < candidate_end - tolerance:
+                        candidate_end = preferred_end
+                        segment_length = candidate_end - current_start
+                        is_last_segment = candidate_end >= bar.end_m - tolerance
+
+            if is_last_segment:
+                segment_end = bar.end_m
+            else:
+                segment_end = self._adjust_segment_end_for_splice_zones(
+                    current_start,
+                    candidate_end,
+                    splice_length,
+                    prohibited_zones,
+                )
             length = segment_end - current_start
             if length <= 0:
                 break
@@ -768,10 +1027,8 @@ class BeamDetailingService:
 
             if self._overlaps_prohibited_zone(joint_start, joint_end, prohibited_zones):
                 logger.warning(
-                    "Empalme de barra %s (%.2f-%.2f m) cae en zona prohibida; revise la geometría",
+                    "No se pudo ubicar el empalme de la barra %s fuera de zonas prohibidas; revisar geometría",
                     bar.id,
-                    joint_start,
-                    joint_end,
                 )
 
             joints.append(
@@ -801,6 +1058,111 @@ class BeamDetailingService:
             segment.splices = segment_splices or None
 
         return segments
+
+    def _prefer_splice_in_previous_corridor(
+        self,
+        *,
+        current_start: float,
+        joint_start: float,
+        candidate_end: float,
+        splice_length: float,
+        prohibited_zones: List[ProhibitedZone],
+    ) -> float:
+        """Mueve el empalme final al inicio del corredor antes del apoyo superior."""
+        tolerance = 1e-3
+        if splice_length <= 0:
+            return candidate_end
+
+        before_zone = self._find_next_before_zone(joint_start, prohibited_zones)
+        if not before_zone:
+            return candidate_end
+
+        prev_end = self._find_zone_end_before(before_zone.start_m, prohibited_zones)
+        if prev_end is None or prev_end < current_start + tolerance:
+            return candidate_end
+
+        corridor_end = before_zone.start_m - tolerance
+        available = corridor_end - prev_end
+        if available < splice_length - tolerance:
+            return candidate_end
+
+        target_end = prev_end + splice_length
+        target_end = min(target_end, corridor_end)
+        if target_end <= current_start + tolerance:
+            return candidate_end
+
+        return target_end
+
+    @staticmethod
+    def _find_overlapping_zone(
+        start: float, end: float, zones: List[ProhibitedZone]
+    ) -> Optional[ProhibitedZone]:
+        for zone in zones:
+            if max(start, zone.start_m) < min(end, zone.end_m):
+                return zone
+        return None
+
+    def _adjust_segment_end_for_splice_zones(
+        self,
+        current_start: float,
+        candidate_end: float,
+        splice_length: float,
+        prohibited_zones: List[ProhibitedZone],
+    ) -> float:
+        tolerance = 1e-3
+        adjusted_end = candidate_end
+        attempts = 0
+
+        while attempts < 20:
+            attempts += 1
+            joint_start = adjusted_end - splice_length
+            if joint_start < current_start + tolerance:
+                joint_start = current_start + tolerance
+            if not self._overlaps_prohibited_zone(joint_start, adjusted_end, prohibited_zones):
+                return adjusted_end
+
+            zone = self._find_overlapping_zone(joint_start, adjusted_end, prohibited_zones)
+            if not zone:
+                break
+
+            shifted_end = zone.start_m - tolerance
+            if shifted_end - splice_length <= current_start + tolerance:
+                # No hay espacio suficiente antes de la zona; salir y dejar advertencia
+                return candidate_end
+
+            adjusted_end = shifted_end
+
+        return adjusted_end
+
+    @staticmethod
+    def _find_next_zone_start(position: float, zones: List[ProhibitedZone]) -> Optional[float]:
+        tolerance = 1e-3
+        for zone in zones:
+            if zone.start_m >= position + tolerance:
+                return zone.start_m
+        return None
+
+    @staticmethod
+    def _find_zone_end_before(position: float, zones: List[ProhibitedZone]) -> Optional[float]:
+        tolerance = 1e-3
+        previous_end = None
+        for zone in zones:
+            if zone.end_m < position - tolerance:
+                previous_end = zone.end_m
+            else:
+                break
+        return previous_end
+
+    @staticmethod
+    def _find_next_before_zone(position: float, zones: List[ProhibitedZone]) -> Optional[ProhibitedZone]:
+        tolerance = 1e-3
+        for zone in zones:
+            if zone.start_m >= position + tolerance:
+                description = (zone.description or "").lower()
+                if "antes" in description:
+                    return zone
+        return None
+
 
     @staticmethod
     def _overlaps_prohibited_zone(start: float, end: float, zones: List[ProhibitedZone]) -> bool:
@@ -1168,27 +1530,27 @@ class BeamDetailingService:
                        bottom_bars: List[RebarDetail], prohibited_zones: List[ProhibitedZone],
                        continuous_bars: Dict) -> List[str]:
         """Realiza validaciones NSR-10 y retorna advertencias"""
-        warnings = []
-        
-        # 1. Verificar barras continuas mínimas (C.21.5.2.1)
+        warnings: List[str] = []
+
         top_continuous = sum(1 for bar in top_bars if bar.type == 'continuous')
         bottom_continuous = sum(1 for bar in bottom_bars if bar.type == 'continuous')
-        
+
         if top_continuous < 2:
             warnings.append("NSR-10 C.21.5.2.1: Mínimo 2 barras superiores continuas requeridas")
         if bottom_continuous < 2:
             warnings.append("NSR-10 C.21.5.2.1: Mínimo 2 barras inferiores continuas requeridas")
-        
-        # 2. Verificar empalmes en zonas prohibidas (C.21.5.3.2)
+
+        # 2. Empalmes fuera de zonas prohibidas
         for bar in top_bars + bottom_bars:
-            if bar.splices:
-                for splice in bar.splices:
-                    for zone in prohibited_zones:
-                        if zone.start_m <= splice['start'] <= zone.end_m:
-                            warnings.append(
-                                f"Barra {bar.id}: Empalme en zona prohibida "
-                                f"({zone.start_m:.2f}-{zone.end_m:.2f}m) - {zone.description}"
-                            )
+            if not bar.splices:
+                continue
+            for splice in bar.splices:
+                zone = self._find_overlapping_zone(splice['start'], splice['end'], prohibited_zones)
+                if zone:
+                    warnings.append(
+                        f"Barra {bar.id}: Empalme en zona prohibida ({zone.start_m:.2f}-{zone.end_m:.2f}m)"
+                    )
+                    break
         
         # 3. Verificar longitudes de desarrollo
         for bar in top_bars + bottom_bars:

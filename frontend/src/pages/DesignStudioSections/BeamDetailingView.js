@@ -272,7 +272,8 @@ const BeamDetailingView = ({ detailingResults, beamData }) => {
       {material_list.length > 0 && (
         <div className="bg-slate-900/30 border border-slate-700 rounded-2xl p-4">
           <h4 className="text-sm font-semibold text-slate-300 mb-3">Lista de materiales</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="max-h-[520px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {material_list.map((item, idx) => (
               <div key={idx} className="bg-slate-800/20 p-4 rounded-xl">
                 <div className="flex justify-between items-start mb-3">
@@ -314,6 +315,7 @@ const BeamDetailingView = ({ detailingResults, beamData }) => {
                 )}
               </div>
             ))}
+            </div>
           </div>
         </div>
       )}
