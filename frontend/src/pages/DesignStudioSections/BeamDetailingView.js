@@ -355,23 +355,6 @@ const BeamDetailingView = ({ detailingResults, beamData }) => {
                   </div>
                 </div>
                 
-                {item.commercial_lengths && item.commercial_lengths.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-700/50">
-                    <p className="text-xs text-slate-400 mb-2">Cortes comerciales:</p>
-                    <div className="space-y-2">
-                      {item.commercial_lengths.map((cut, cutIdx) => (
-                        <div key={cutIdx} className="flex justify-between items-center text-xs">
-                          <span className="text-slate-300">
-                            {cut.num_bars} barras de {cut.commercial_length}m
-                          </span>
-                          <span className="text-slate-400">
-                            {cut.efficiency.toFixed(1)}% eficiencia
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             ))}
             </div>
