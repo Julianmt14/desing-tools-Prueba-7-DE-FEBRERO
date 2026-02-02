@@ -18,6 +18,10 @@ class DrawingUnits(BaseModel):
     precision: int = Field(2, ge=0, le=6)
 
 
+def _default_drawing_units() -> "DrawingUnits":
+    return DrawingUnits(source_unit="m", target_unit="mm", scale_factor=1000.0, precision=2)
+
+
 class BeamDrawingMetadata(BaseModel):
     project_name: str
     beam_label: str
@@ -91,12 +95,12 @@ class BeamDrawingPayload(BaseModel):
     rebar_layout: BeamRebarLayout
     detailing_results: Optional[DetailingResults] = None
     stirrups_config: Optional[List[StirrupConfig]] = None
-    drawing_units: DrawingUnits = Field(default_factory=DrawingUnits)
+    drawing_units: DrawingUnits = Field(default_factory=_default_drawing_units)
 
 
 class DrawingExportRequest(BaseModel):
     design_id: int
-    format: Literal["dwg", "dxf", "pdf"] = "dwg"
+    format: Literal["dwg", "dxf", "pdf", "svg"] = "dwg"
     template: str = Field("beam/default", description="Identificador de la plantilla de layout")
     scale: float = Field(50.0, gt=0)
     locale: Literal["es-CO", "en-US"] = "es-CO"
