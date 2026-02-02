@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import BlockIdentification from './DesignStudioSections/BlockIdentification';
 import BlockGeometrySupports from './DesignStudioSections/BlockGeometrySupports';
 import BlockReinforcement from './DesignStudioSections/BlockReinforcement';
+import DespieceExportPanel from './DesignStudioSections/DespieceExportPanel';
 import {
   MAX_BAR_LENGTH_OPTIONS,
   getEnergyOptions,
@@ -289,6 +290,12 @@ const DesignStudio = () => {
   const watchBeamTotalLength = watch('beam_total_length_m');
   const watchConcreteStrength = watch('concrete_strength');
   const watchCoverCm = watch('cover_cm');
+  const watchProjectName = watch('project_name');
+  const watchBeamLabelField = watch('beam_label');
+
+  const activeProjectName =
+    lastDesign?.despiece_viga?.project_name || lastDesign?.title || watchProjectName;
+  const activeBeamLabel = lastDesign?.despiece_viga?.beam_label || watchBeamLabelField;
   const nsrWarnings = useMemo(
     () => validateNSR10({ energy_dissipation_class: energyClass, hook_type: watchHookType }),
     [energyClass, watchHookType]
@@ -915,6 +922,13 @@ const DesignStudio = () => {
         </section>
 
         <aside className="space-y-6">
+          <DespieceExportPanel
+            designId={lastDesign?.id}
+            projectName={activeProjectName}
+            beamLabel={activeBeamLabel}
+            lastSavedAt={lastDesign?.updated_at || lastDesign?.created_at}
+          />
+
           <div className="bg-[#050b16] border border-slate-800 rounded-3xl p-6 space-y-4 shadow-[0_20px_60px_rgba(2,6,23,0.65)]">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">Especificación estribos</h2>

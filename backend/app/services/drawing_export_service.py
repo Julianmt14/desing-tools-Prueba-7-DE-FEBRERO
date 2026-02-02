@@ -64,6 +64,13 @@ def generate_export_for_design(
     design: models.Design,
     request: DrawingExportRequest,
 ) -> ExportFileResult:
+    logger.info(
+        "[Export] Generando plano | design_id=%s format=%s template=%s scale=1:%s",
+        design.id,
+        request.format,
+        request.template,
+        request.scale,
+    )
     payload = design_service.build_beam_drawing_payload(design)
     document = _render_document(payload, request)
     destination_dir = prepare_destination_dir(payload.metadata.project_name)
@@ -81,6 +88,12 @@ def generate_export_for_design(
             preview_path = destination_dir / preview_name
             preview_path.write_text(render_svg(document), encoding="utf-8")
 
+    logger.info(
+        "[Export] Plano generado | design_id=%s format=%s path=%s",
+        design.id,
+        request.format,
+        file_path,
+    )
     return ExportFileResult(file_path=file_path, preview_path=preview_path, inline_preview=inline_preview)
 
 
@@ -91,6 +104,13 @@ def create_export_job(
     request: DrawingExportRequest,
     user_id: int,
 ) -> models.DesignExport:
+    logger.info(
+        "[Export] Creando job | design_id=%s user_id=%s template=%s format=%s",
+        design.id,
+        user_id,
+        request.template,
+        request.format,
+    )
     job = models.DesignExport(
         job_id=str(uuid.uuid4()),
         design_id=design.id,
@@ -106,6 +126,7 @@ def create_export_job(
     db.add(job)
     db.commit()
     db.refresh(job)
+    logger.info("[Export] Job encolado | job_id=%s status=%s", job.job_id, job.status)
     return job
 
 
@@ -158,6 +179,7 @@ def process_export_job(job_id: str) -> None:
         job.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(job)
+        logger.info("[Export] Job en ejecución | job_id=%s", job.job_id)
 
         design = job.design
         if design is None:
@@ -177,6 +199,7 @@ def process_export_job(job_id: str) -> None:
         job.status = "completed"
         job.updated_at = datetime.now(timezone.utc)
         db.commit()
+        logger.info("[Export] Job completado | job_id=%s output=%s", job.job_id, job.file_path)
     except Exception as exc:  # pragma: no cover - fallbacks de runtime
         logger.exception("Falló el job de exportación %s", job_id)
         db.rollback()

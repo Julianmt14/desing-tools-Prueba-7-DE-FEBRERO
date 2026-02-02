@@ -2,10 +2,16 @@ from typing import Optional
 from urllib.parse import quote_plus
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
     app_name: str = "Design Tools API"
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
@@ -64,11 +70,5 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return self.allowed_origins or self.cors_origins
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "ignore"
-
 
 settings = Settings()

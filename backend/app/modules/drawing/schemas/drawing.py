@@ -99,7 +99,7 @@ class BeamDrawingPayload(BaseModel):
 
 
 class DrawingExportRequest(BaseModel):
-    design_id: int
+    design_id: int | None = None
     format: Literal["dwg", "dxf", "pdf", "svg"] = "dwg"
     template: str = Field("beam/default", description="Identificador de la plantilla de layout")
     scale: float = Field(50.0, gt=0)
