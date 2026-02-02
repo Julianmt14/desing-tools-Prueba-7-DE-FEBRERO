@@ -1,7 +1,7 @@
 """update hook lengths table to NSR-10 C.7.1 values
 
 Revision ID: 0012
-Revises: 0011
+Revises: cb78413cf513
 Create Date: 2026-02-01
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 
 revision = "0012"
-down_revision = "0011"
+down_revision = "cb78413cf513"
 branch_labels = None
 depends_on = None
 

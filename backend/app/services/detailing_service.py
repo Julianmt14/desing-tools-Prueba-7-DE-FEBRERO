@@ -69,7 +69,7 @@ class BeamDetailingService(SegmentationMixin):
         self.min_edge_cover_m = 0.05  # 5 cm mínimo en extremos
         self.hook_length_table = {
             '#2': {'90': 0.10, '180': 0.080, '135': 0.075},
-            '#3': {'90': 0.15, '180': 0.130, '135': 0.095},
+            '#3': {'90': 0.15, '180': 0.130, '135': 0.080},
             '#4': {'90': 0.20, '180': 0.150, '135': 0.127},
             '#5': {'90': 0.25, '180': 0.180, '135': 0.159},
             '#6': {'90': 0.30, '180': 0.210, '135': 0.191},
@@ -199,6 +199,8 @@ class BeamDetailingService(SegmentationMixin):
                 prohibited_zones,
                 coordinates['total_length'],
             )
+            self._rebuild_splices_from_geometry(top_bars)
+            self._rebuild_splices_from_geometry(bottom_bars)
             debugger.log("Empalmes coordinados", total_top=len(top_bars), total_bottom=len(bottom_bars))
             
             # 8. Aplicar refuerzo de segmentos específicos

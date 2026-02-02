@@ -684,3 +684,41 @@ class SegmentationMixin:
             if max(start, zone.start_m) < min(end, zone.end_m):
                 return True
         return False
+
+    def _rebuild_splices_from_geometry(self, bars: List[RebarDetail]) -> None:
+        if not bars:
+            return
+
+        grouped: Dict[str, List[RebarDetail]] = {}
+        for bar in bars:
+            base_id = bar.id.rsplit("-S", 1)[0] if "-S" in bar.id else bar.id
+            grouped.setdefault(base_id, []).append(bar)
+
+        tolerance = 1e-3
+        for segments in grouped.values():
+            segments.sort(key=lambda seg: (seg.start_m, seg.end_m))
+            for segment in segments:
+                segment.splices = None
+
+            for idx in range(len(segments) - 1):
+                current = segments[idx]
+                following = segments[idx + 1]
+                overlap_start = max(current.start_m, following.start_m)
+                overlap_end = min(current.end_m, following.end_m)
+                if overlap_end - overlap_start <= tolerance:
+                    continue
+
+                splice_payload = {
+                    "start": overlap_start,
+                    "end": overlap_end,
+                    "length": overlap_end - overlap_start,
+                    "type": "lap_splice_class_b",
+                    "position": current.position,
+                }
+
+                for segment in (current, following):
+                    splice_entry = splice_payload.copy()
+                    if segment.splices:
+                        segment.splices.append(splice_entry)
+                    else:
+                        segment.splices = [splice_entry]

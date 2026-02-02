@@ -1,6 +1,6 @@
 """add detailing fields to despiece viga
 
-Revision ID: 0012
+Revision ID: cb78413cf513
 Revises: 0011
 Create Date: 2026-01-31
 """
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0012"
+revision = "cb78413cf513"
 down_revision = "0011"
 branch_labels = None
 depends_on = None

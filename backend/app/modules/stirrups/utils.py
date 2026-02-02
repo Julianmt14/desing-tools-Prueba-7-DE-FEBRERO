@@ -79,16 +79,19 @@ def derive_unconfined_segments(
 ) -> List[Tuple[float, float]]:
     if total_length <= 0:
         return []
+    tolerance = 1e-2
     merged_confined = merge_segments(confined_segments)
     segments: List[Tuple[float, float]] = []
     cursor = 0.0
     for start, end in merged_confined:
-        if start > cursor:
+        gap = start - cursor
+        if gap > tolerance:
             segments.append((cursor, start))
         cursor = max(cursor, end)
-    if cursor < total_length:
+    remaining = total_length - cursor
+    if remaining > tolerance:
         segments.append((cursor, total_length))
-    return [(start, end) for start, end in segments if end > start]
+    return [(start, end) for start, end in segments if (end - start) > tolerance]
 
 
 def extract_splice_segments(rebars: Iterable[RebarDetail | dict]) -> List[Tuple[float, float]]:

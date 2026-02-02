@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib.parse import quote_plus
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -51,9 +52,13 @@ class Settings(BaseSettings):
     def sqlalchemy_database_uri(self) -> str:
         if self.database_url:
             return self.database_url
+        safe_user = quote_plus(self.postgres_user)
+        safe_password = quote_plus(self.postgres_password)
+        safe_host = self.postgres_host
+        safe_db = quote_plus(self.postgres_db)
         return (
-            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            f"postgresql+psycopg2://{safe_user}:{safe_password}"
+            f"@{safe_host}:{self.postgres_port}/{safe_db}"
         )
 
     @property

@@ -8,7 +8,10 @@ from app.core.database import Base
 from app import models
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_uri)
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.sqlalchemy_database_uri.replace("%", "%%"),
+)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
