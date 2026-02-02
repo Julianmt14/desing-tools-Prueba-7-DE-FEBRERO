@@ -392,21 +392,6 @@ const BlockReinforcement = ({
       {segmentReinforcementsError && <p className="text-rose-400 text-xs">{segmentReinforcementsError}</p>}
     </div>
 
-    <div className="rounded-3xl border border-slate-800 bg-[#050b16]/40 p-5">
-      <p className="text-xs uppercase tracking-[0.3em] text-slate-400 mb-2">Traslapos automáticos NSR-10</p>
-      <div className="flex flex-wrap items-baseline gap-3">
-        <span className="text-3xl font-semibold text-white">
-          {isLapSpliceLoading ? '—' : typeof lapSpliceLength === 'number' ? `${lapSpliceLength.toFixed(2)} m` : '—'}
-        </span>
-        <span className="text-xs text-slate-400">
-          {concreteStrength ? `f'c ${concreteStrength}` : 'Selecciona f′c para estimar el traslapo'}
-        </span>
-      </div>
-      <p className="text-xs text-slate-500 mt-2">
-        Valor máximo según la tabla oficial de traslapos para los diámetros activos y la resistencia del concreto.
-      </p>
-    </div>
-
     <div className="bg-[#0b172f] rounded-3xl border border-slate-800 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-400">Estribos</h2>
@@ -462,71 +447,6 @@ const BlockReinforcement = ({
           </div>
         ))}
         {errors.stirrups_config?.message && <p className="text-rose-400 text-xs">{errors.stirrups_config.message}</p>}
-      </div>
-    </div>
-
-    <div className="rounded-3xl border border-slate-800 bg-gradient-to-r from-primary/10 to-emerald-500/10 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.4em] text-slate-400">Despiece automático</p>
-          <h3 className="text-lg font-semibold">Cálculo NSR-10</h3>
-        </div>
-        <span className="material-symbols-outlined text-primary">engineering</span>
-      </div>
-
-      <p className="text-sm text-slate-300 mb-4">
-        Calcula automáticamente el despiece longitudinal según disposiciones sísmicas NSR-10 Título C.
-      </p>
-
-      <button
-        type="button"
-        onClick={handleDetailingClick}
-        disabled={
-          detailingIsComputing ||
-          totalTopBars === 0 ||
-          totalBottomBars === 0 ||
-          typeof detailingHandler !== 'function'
-        }
-        className={`w-full py-3 rounded-xl text-sm font-bold uppercase tracking-[0.3em] transition-all ${
-          detailingIsComputing ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-primary hover:bg-primary/80 text-white'
-        }`}
-      >
-        {detailingIsComputing ? (
-          <>
-            <span className="material-symbols-outlined animate-spin mr-2">refresh</span>
-            Procesando cálculo NSR-10...
-          </>
-        ) : (
-          <>
-            <span className="material-symbols-outlined mr-2">bolt</span>
-            Generar despiece sísmico
-          </>
-        )}
-      </button>
-
-      {detailingStatusError && (
-        <div className="mt-3 p-3 bg-rose-900/30 border border-rose-700/50 rounded-lg">
-          <p className="text-sm text-rose-300">{detailingStatusError}</p>
-        </div>
-      )}
-
-      <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-          Barras continuas
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-          Zonas prohibidas
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-          Empalmes clase B
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-          Validación DES
-        </div>
       </div>
     </div>
     </div>

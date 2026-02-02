@@ -1,4 +1,6 @@
 import React, { useMemo } from 'react';
+import { estimateStirrupTotalLengthCm, DEFAULT_STIRRUP_DIAMETER } from '../../utils/stirrups';
+import { REBAR_WEIGHT_KG_PER_M } from '../../utils/nsr10Constants';
 
 const BeamDetailingView = ({ detailingResults, beamData }) => {
   if (!detailingResults) {
@@ -71,6 +73,112 @@ const BeamDetailingView = ({ detailingResults, beamData }) => {
   }, [bottom_bars]);
 
   const tableBars = [...groupedTopBars, ...groupedBottomBars];
+  const stirrupMaterialItem = useMemo(() => {
+    const summary = detailingResults?.stirrups_summary;
+    if (!summary || !beamData) {
+      return null;
+    }
+
+    const segments = Array.isArray(summary.zone_segments) ? summary.zone_segments : [];
+    if (segments.length === 0) {
+      return null;
+    }
+
+    const spans = Array.isArray(beamData.span_geometries) ? beamData.span_geometries : [];
+    if (spans.length === 0) {
+      return null;
+    }
+    const supports = Array.isArray(beamData.axis_supports) ? beamData.axis_supports : [];
+
+    const spanRanges = [];
+    let cursor = 0;
+    const iterations = Math.max(supports.length, spans.length + 1);
+    for (let index = 0; index < iterations; index += 1) {
+      const supportWidthCm = Number(supports[index]?.support_width_cm);
+      const supportWidthM = Number.isFinite(supportWidthCm) ? supportWidthCm / 100 : 0;
+      cursor += supportWidthM;
+      if (index < spans.length) {
+        const spanLength = Number(spans[index]?.clear_span_between_supports_m) || 0;
+        const start = cursor;
+        const end = cursor + Math.max(spanLength, 0);
+        spanRanges.push({ index, start, end });
+        cursor = end;
+      }
+    }
+
+    if (spanRanges.length === 0) {
+      return null;
+    }
+
+    const spanSpecs = new Map((summary.span_specs || []).map((spec) => [spec.span_index, spec]));
+    const countMap = new Map(spanRanges.map((span) => [span.index, 0]));
+
+    segments.forEach((segment) => {
+      const segStart = Number(segment?.start_m);
+      const segEnd = Number(segment?.end_m);
+      const segCount = Number(segment?.estimated_count);
+      if (!Number.isFinite(segStart) || !Number.isFinite(segEnd) || segEnd <= segStart || !Number.isFinite(segCount) || segCount <= 0) {
+        return;
+      }
+      const segmentLength = segEnd - segStart;
+      spanRanges.forEach((span) => {
+        const overlapStart = Math.max(segStart, span.start);
+        const overlapEnd = Math.min(segEnd, span.end);
+        const overlapLength = overlapEnd - overlapStart;
+        if (overlapLength <= 0 || segmentLength <= 0) {
+          return;
+        }
+        const ratio = overlapLength / segmentLength;
+        const previous = countMap.get(span.index) || 0;
+        countMap.set(span.index, previous + segCount * ratio);
+      });
+    });
+
+    const barMark = summary.diameter || DEFAULT_STIRRUP_DIAMETER;
+    const hookType = summary.hook_type;
+    let pieces = 0;
+    let totalLengthM = 0;
+
+    countMap.forEach((count, spanIndex) => {
+      if (!count || count <= 0) {
+        return;
+      }
+      const spec = spanSpecs.get(spanIndex);
+      const widthCm = Number(spec?.stirrup_width_cm);
+      const heightCm = Number(spec?.stirrup_height_cm);
+      if (!Number.isFinite(widthCm) || !Number.isFinite(heightCm)) {
+        return;
+      }
+      const { totalLengthCm } = estimateStirrupTotalLengthCm(widthCm, heightCm, { barMark, hookType });
+      const lengthPerPieceM = totalLengthCm / 100;
+      totalLengthM += lengthPerPieceM * count;
+      pieces += count;
+    });
+
+    if (!Number.isFinite(totalLengthM) || totalLengthM <= 0 || !Number.isFinite(pieces) || pieces <= 0) {
+      return null;
+    }
+
+    const weightPerMeter = REBAR_WEIGHT_KG_PER_M[barMark] || 0;
+    const weightKg = totalLengthM * weightPerMeter;
+
+    return {
+      diameter: barMark,
+      pieces: Math.round(pieces),
+      total_length_m: Number(totalLengthM.toFixed(1)),
+      weight_kg: Number(weightKg.toFixed(1)),
+      waste_percentage: null,
+      isStirrups: true,
+    };
+  }, [detailingResults, beamData]);
+
+  const materialListWithStirrups = useMemo(() => {
+    const baseList = Array.isArray(material_list) ? material_list : [];
+    if (!stirrupMaterialItem) {
+      return baseList;
+    }
+    return [...baseList, stirrupMaterialItem];
+  }, [material_list, stirrupMaterialItem]);
 
   return (
     <div className="space-y-6">
@@ -91,7 +199,7 @@ const BeamDetailingView = ({ detailingResults, beamData }) => {
             </div>
           </div>
           <div className="text-xs text-slate-400">
-            {allBars.length} barras · {material_list.length} diámetros
+            {allBars.length} barras · {materialListWithStirrups.length} diámetros
           </div>
         </div>
       </div>
@@ -328,35 +436,44 @@ const BeamDetailingView = ({ detailingResults, beamData }) => {
       </div>
 
       {/* Lista de materiales */}
-      {material_list.length > 0 && (
+      {materialListWithStirrups.length > 0 && (
         <div className="bg-slate-900/30 border border-slate-700 rounded-2xl p-4">
           <h4 className="text-sm font-semibold text-slate-300 mb-3">Lista de materiales</h4>
           <div className="max-h-[520px] overflow-y-auto pr-1">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {material_list.map((item, idx) => (
-              <div key={idx} className="bg-slate-800/20 p-4 rounded-xl">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg font-semibold">{item.diameter}</span>
-                      <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">
-                        {item.pieces} {item.pieces === 1 ? 'pieza' : 'piezas'}
-                      </span>
+            {materialListWithStirrups.map((item, idx) => {
+              const isStirrupsItem = Boolean(item.isStirrups);
+              const wasteValue = typeof item.waste_percentage === 'number' ? item.waste_percentage : null;
+              const totalLength = typeof item.total_length_m === 'number' ? item.total_length_m : Number(item.total_length_m);
+              const weightValue = typeof item.weight_kg === 'number' ? item.weight_kg : Number(item.weight_kg);
+              return (
+                <div key={idx} className="bg-slate-800/20 p-4 rounded-xl">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold">
+                          {isStirrupsItem ? `${item.diameter} · Estribos` : item.diameter}
+                        </span>
+                        <span className="text-xs text-slate-400 bg-slate-700/50 px-2 py-1 rounded">
+                          {item.pieces} {item.pieces === 1 ? 'pieza' : 'piezas'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-400 mt-1">
+                        Longitud total: <span className="font-semibold">{totalLength.toFixed(1)} m</span>
+                      </p>
                     </div>
-                    <p className="text-sm text-slate-400 mt-1">
-                      Longitud total: <span className="font-semibold">{item.total_length_m.toFixed(1)} m</span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-semibold">{item.weight_kg.toFixed(1)} kg</div>
-                    <div className={`text-xs ${item.waste_percentage > 15 ? 'text-rose-400' : item.waste_percentage > 5 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                      {item.waste_percentage.toFixed(1)}% desperdicio
+                    <div className="text-right">
+                      <div className="text-lg font-semibold">{weightValue.toFixed(1)} kg</div>
+                      {wasteValue !== null && (
+                        <div className={`text-xs ${wasteValue > 15 ? 'text-rose-400' : wasteValue > 5 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {wasteValue.toFixed(1)}% desperdicio
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                
-              </div>
-            ))}
+              );
+            })}
             </div>
           </div>
         </div>

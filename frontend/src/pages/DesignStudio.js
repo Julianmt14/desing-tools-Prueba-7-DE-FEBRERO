@@ -162,7 +162,6 @@ const formSchema = z.object({
   energy_dissipation_class: z.enum(energyOptions),
   concrete_strength: z.string().min(1, 'Selecciona f’c'),
   reinforcement: z.string().min(1, 'Selecciona fy'),
-  notes: z.string().optional(),
 });
 
 const calculateBeamTotalLength = (spans, supports) => {
@@ -219,7 +218,6 @@ const defaultValues = {
   energy_dissipation_class: DEFAULT_ENERGY_CLASS,
   concrete_strength: '21 MPa (3000 psi)',
   reinforcement: '420 MPa (Grado 60)',
-  notes: 'Detalle conforme a NSR-10 Título C.\nConsiderar recubrimientos adicionales por exposición costa.',
 };
 
 defaultValues.beam_total_length_m = calculateBeamTotalLength(defaultValues.span_geometries, defaultValues.axis_supports);
@@ -887,11 +885,6 @@ const DesignStudio = () => {
               detailingError={detailingError}
               nsrWarnings={nsrWarnings}
             />
-
-            <div>
-              <label className="label">Notas</label>
-              <textarea className="input h-24" {...register('notes')} placeholder="Condiciones, recubrimientos, observaciones" />
-            </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
               <button

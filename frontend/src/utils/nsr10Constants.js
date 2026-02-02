@@ -82,3 +82,25 @@ export const calculateAdjustedDevelopmentLength = (diameter, concreteStrength) =
   
   return baseLength * fcFactor;
 };
+
+export const REBAR_WEIGHT_KG_PER_M = {
+  '#3': 0.56,
+  '#4': 1.0,
+  '#5': 1.55,
+  '#6': 2.26,
+  '#7': 3.04,
+  '#8': 3.97,
+  '#9': 5.06,
+  '#10': 6.4,
+  '#11': 7.91,
+  '#14': 14.6,
+  '#18': 23.7,
+};
+
+export const getRebarWeightKgPerMeter = (diameter) => {
+  if (!diameter) {
+    return null;
+  }
+  const normalized = diameter.startsWith('#') ? diameter : `#${diameter}`;
+  return REBAR_WEIGHT_KG_PER_M[normalized] ?? null;
+};
