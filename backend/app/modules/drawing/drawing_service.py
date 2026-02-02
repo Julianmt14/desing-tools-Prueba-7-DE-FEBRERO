@@ -43,7 +43,7 @@ class BeamDrawingService:
         self.scale = scale
         self.vertical_scale = vertical_scale
         self.beam_renderer = BeamRenderer()
-        self.rebar_drawer = RebarDrawer()
+        self.rebar_drawer = RebarDrawer(reference_vertical_scale=vertical_scale)
         self.dimension_renderer = DimensionRenderer()
         self.title_block_renderer = TitleBlockRenderer()
 

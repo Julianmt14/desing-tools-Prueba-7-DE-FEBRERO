@@ -89,15 +89,25 @@ class DWGExporter:
         elif isinstance(entity, LineEntity):
             msp.add_line(entity.start, entity.end, dxfattribs=self._attribs(entity))
         elif isinstance(entity, TextEntity):
-            msp.add_text(
+            dxfattribs = {
+                "layer": entity.layer,
+                "style": entity.style,
+                "rotation": entity.rotation,
+                "insert": entity.insert,
+            }
+            halign = entity.metadata.get("halign") if entity.metadata else None
+            valign = entity.metadata.get("valign") if entity.metadata else None
+            align_point = entity.metadata.get("align_point") if entity.metadata else None
+            if halign is not None:
+                dxfattribs["halign"] = halign
+            if valign is not None:
+                dxfattribs["valign"] = valign
+            if align_point is not None:
+                dxfattribs["align_point"] = align_point
+            text = msp.add_text(
                 entity.content,
                 height=entity.height,
-                dxfattribs={
-                    "layer": entity.layer,
-                    "style": entity.style,
-                    "rotation": entity.rotation,
-                    "insert": entity.insert,
-                },
+                dxfattribs=dxfattribs,
             )
         elif isinstance(entity, HatchEntity):
             hatch = msp.add_hatch(color=7, dxfattribs={"layer": entity.layer})
