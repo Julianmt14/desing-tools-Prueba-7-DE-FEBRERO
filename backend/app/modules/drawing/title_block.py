@@ -25,6 +25,14 @@ HOOK_LENGTH_TABLE = {
     "#18": {"90": 1.03, "180": 0.572},
 }
 
+PLACEHOLDER_OFFSETS = {
+    "BASE_VIGA": (-120.0, 0.0),
+    "ALTURA_VIGA": (0.0, -120.0),
+    "BASE_ESTRIBO": (-120.0, 0.0),
+    "ALTURA_ESTRIBO": (0.0, -120.0),
+    "GANCHO_ESTRIBO": (-100.0, 0.0),
+}
+
 
 def rounded_rect_points(x_min, y_min, width, height, radius, segments=4):
     x_max = x_min + width
@@ -445,6 +453,14 @@ class RightInfoBoxRenderer:
                 placeholder_tag = entity.metadata.get("placeholder") if entity.metadata else None
                 if placeholder_tag in rotate_placeholders:
                     entity.rotation = (entity.rotation or 0.0) + 90.0
+                offset = PLACEHOLDER_OFFSETS.get(placeholder_tag) if placeholder_tag else None
+                if offset:
+                    dx = offset[0] * scale
+                    dy = offset[1] * scale
+                    entity.insert = (entity.insert[0] + dx, entity.insert[1] + dy)
+                    if entity.metadata and "align_point" in entity.metadata:
+                        ax, ay = entity.metadata["align_point"]
+                        entity.metadata["align_point"] = (ax + dx, ay + dy)
                 if placeholder_tag == "GANCHO_ESTRIBO":
                     gancho_entities.append(entity)
                     continue
