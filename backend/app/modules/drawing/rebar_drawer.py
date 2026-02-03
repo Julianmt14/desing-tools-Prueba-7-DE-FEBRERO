@@ -415,6 +415,7 @@ class RebarDrawer:
             return
 
         is_top = segment.bar.position == "top"
+        interior_vertical = -1.0 if is_top else 1.0
 
         for origin_x, orientation, hook_length, hook_length_m in actions:
             hook_origin_x = origin_x
@@ -436,10 +437,11 @@ class RebarDrawer:
                     )
                     hook_origin_y = aux_end[1]
 
-            vector = self._hook_vector(hook_type, orientation)
+            vector = self._hook_vector(hook_type, orientation, interior_vertical)
             dx = hook_length * vector[0]
-            dy = hook_length * vector[1] * direction
-            dy = max(min(dy, vertical_amplitude), -vertical_amplitude)
+            dy = hook_length * vector[1]
+            if hook_type != "90":
+                dy = max(min(dy, vertical_amplitude), -vertical_amplitude)
             document.add_entity(
                 PolylineEntity(
                     layer=layer,
@@ -467,13 +469,13 @@ class RebarDrawer:
             )
 
     @staticmethod
-    def _hook_vector(hook_type: str, orientation: int) -> tuple[float, float]:
+    def _hook_vector(hook_type: str, orientation: int, interior_vertical: float) -> tuple[float, float]:
         if hook_type == "180":
             return (orientation, 0.0)
         if hook_type == "90":
-            return (0.0, orientation)
+            return (0.0, interior_vertical)
         # 135 default
-        return (-orientation * 0.45, orientation * 0.85)
+        return (orientation * 0.45, interior_vertical * 0.85)
 
     def _hook_length_mm(self, bar: RebarDetail, context, *, length_override_m: float | None = None) -> float:
         length_m = length_override_m if length_override_m is not None else self._lookup_hook_length_m(bar)

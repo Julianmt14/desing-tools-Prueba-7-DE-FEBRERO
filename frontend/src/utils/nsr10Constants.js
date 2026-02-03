@@ -28,7 +28,7 @@ export const NSR10_CONSTANTS = {
   
   // Tipos de gancho permitidos por clase
   ALLOWED_HOOKS_BY_CLASS: {
-    'DES': ['135', '180'],  // Solo 135° o 180° para alta disipación
+    'DES': ['90', '135', '180'],  // Permitir 90° en vigas longitudinales de alta disipación
     'DMO': ['90', '135', '180'],
     'DMI': ['90', '135', '180']
   },
