@@ -186,8 +186,10 @@ def compute_detailing_for_design(
             despiece.id,
         )
 
+        normalized_spans = _normalize_span_geometries(despiece.span_geometries)
+
         request_data = {
-            "span_geometries": despiece.span_geometries or [],
+            "span_geometries": normalized_spans,
             "axis_supports": [
                 {"support_width_cm": width, "label": f"EJE {index + 1}"}
                 for index, width in enumerate(despiece.support_widths_cm or [])
@@ -396,6 +398,54 @@ def _extract_bar_config(diameters: List[str]) -> List[BarConfig]:
         return []
     counts = Counter(diameters)
     return [{"diameter": diameter, "quantity": count} for diameter, count in counts.items()]
+
+
+def _normalize_span_geometries(spans: List[Dict[str, Any]] | None) -> List[Dict[str, Any]]:
+    if not spans:
+        return []
+
+    normalized: List[Dict[str, Any]] = []
+
+    for span in spans:
+        if not isinstance(span, dict):
+            continue
+
+        base_value = _first_numeric(
+            span.get("section_base_cm"),
+            span.get("section_width_cm"),
+            span.get("base_cm"),
+            span.get("width_cm"),
+        )
+        height_value = _first_numeric(
+            span.get("section_height_cm"),
+            span.get("height_cm"),
+        )
+
+        normalized_span = dict(span)
+        if base_value is not None:
+            normalized_span["section_base_cm"] = base_value
+            normalized_span.setdefault("section_width_cm", base_value)
+        if height_value is not None:
+            normalized_span["section_height_cm"] = height_value
+
+        normalized.append(normalized_span)
+
+    return normalized
+
+
+def _first_numeric(*values: Any) -> float | None:
+    for value in values:
+        numeric = _coerce_float(value)
+        if numeric is not None:
+            return numeric
+    return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _get_user_id(user: models.User) -> int:

@@ -7,6 +7,7 @@ from app.modules.drawing.dimensions import DimensionRenderer
 from app.modules.drawing.domain import DrawingDocument, DrawingEntity
 from app.modules.drawing.geometry import CoordinateSpace, to_drawing_units
 from app.modules.drawing.rebar_drawer import RebarDrawer
+from app.modules.drawing.stirrup_renderer import StirrupRenderer
 from app.modules.drawing.schemas import BeamDrawingPayload, DrawingExportRequest
 from app.modules.drawing.templates import TemplateConfig, get_template_config
 from app.modules.drawing.title_block import TitleBlockRenderer
@@ -45,6 +46,7 @@ class BeamDrawingService:
         self.beam_renderer = BeamRenderer()
         self.rebar_drawer = RebarDrawer(reference_vertical_scale=vertical_scale)
         self.dimension_renderer = DimensionRenderer()
+        self.stirrup_renderer = StirrupRenderer()
         self.title_block_renderer = TitleBlockRenderer()
 
     def render_document(
@@ -85,6 +87,7 @@ class BeamDrawingService:
 
         self.beam_renderer.draw(doc, context)
         self.rebar_drawer.draw(doc, context)
+        self.stirrup_renderer.draw(doc, context)
         self.dimension_renderer.draw(doc, context)
         self.title_block_renderer.draw(doc, context)
         return doc
