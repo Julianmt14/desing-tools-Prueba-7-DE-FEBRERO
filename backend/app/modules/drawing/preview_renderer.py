@@ -52,12 +52,28 @@ def render_svg(document: DrawingDocument) -> str:
                 )
             )
         elif isinstance(entity, TextEntity):
+            metadata = entity.metadata or {}
+            insert_point = metadata.get("align_point") or entity.insert
+            text_kwargs = {}
+            halign = metadata.get("halign")
+            if halign == 1:  # center
+                text_kwargs["text_anchor"] = "middle"
+            elif halign == 2:  # right
+                text_kwargs["text_anchor"] = "end"
+            valign = metadata.get("valign")
+            if valign == 1:  # middle
+                text_kwargs["dominant_baseline"] = "middle"
+            elif valign == 2:  # top
+                text_kwargs["dominant_baseline"] = "text-before-edge"
+            elif valign == 3:  # bottom
+                text_kwargs["dominant_baseline"] = "text-after-edge"
             svg.add(
                 svgwrite.text.Text(
                     entity.content,
-                    insert=entity.insert,
+                    insert=insert_point,
                     fill=_layer_color(entity.layer),
                     font_size=f"{entity.height}px",
+                    **text_kwargs,
                 )
             )
         elif isinstance(entity, HatchEntity):
