@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 import math
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple, cast
 
 import ezdxf
 
@@ -47,17 +47,20 @@ class TemplateText:
         text_layer: str | None,
         text_style: str,
         replacements: Dict[str, str],
+        text_scale: float,
     ) -> TextEntity:
         ox, oy = offset
         insert = (ox + scale * self.insert[0], oy + scale * self.insert[1])
         content = replacements.get(self.placeholder, self.content) if self.placeholder else self.content
         metadata = _attachment_metadata(self.attachment_point, insert)
+        if self.placeholder:
+            metadata["placeholder"] = self.placeholder
         layer = text_layer or self.layer
         return TextEntity(
             layer=layer,
             content=content,
             insert=insert,
-            height=self.height * scale,
+            height=self.height * scale * text_scale,
             rotation=self.rotation,
             style=text_style,
             metadata=metadata,
@@ -90,12 +93,13 @@ class SectionTemplate:
         text_layer: str,
         text_style: str,
         placeholders: Dict[str, str],
+        text_scale: float = 1.0,
     ) -> List[TextEntity | PolylineEntity]:
         entities: List[TextEntity | PolylineEntity] = []
         for poly in self.polylines:
             entities.append(poly.instantiate(scale, offset, shape_layer))
         for text in self.texts:
-            entities.append(text.instantiate(scale, offset, text_layer, text_style, placeholders))
+            entities.append(text.instantiate(scale, offset, text_layer, text_style, placeholders, text_scale))
         return entities
 
 
@@ -127,7 +131,8 @@ def _load_template() -> SectionTemplate:
             max_x = max(max_x, x)
             max_y = max(max_y, y)
 
-    for entity in msp:
+    for raw_entity in msp:
+        entity = cast(Any, raw_entity)
         kind = entity.dxftype()
         if kind == "LWPOLYLINE":
             vertices = [(vec[0], vec[1]) for vec in entity.vertices()]
@@ -188,7 +193,7 @@ def _extract_placeholder(content: str) -> str | None:
     return None
 
 
-def _attachment_metadata(attachment: int | None, align_point: Point) -> Dict[str, int | Point]:
+def _attachment_metadata(attachment: int | None, align_point: Point) -> Dict[str, Any]:
     if attachment is None:
         return {"align_point": align_point}
     halign_map = {

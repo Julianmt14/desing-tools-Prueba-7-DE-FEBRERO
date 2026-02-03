@@ -10,6 +10,21 @@ from app.modules.drawing.section_template import SectionTemplateError, get_secti
 
 logger = logging.getLogger(__name__)
 
+HOOK_LENGTH_TABLE = {
+    "#2": {"90": 0.10, "180": 0.08, "135": 0.075},
+    "#3": {"90": 0.15, "180": 0.13, "135": 0.08},
+    "#4": {"90": 0.20, "180": 0.15, "135": 0.127},
+    "#5": {"90": 0.25, "180": 0.18, "135": 0.159},
+    "#6": {"90": 0.30, "180": 0.21, "135": 0.191},
+    "#7": {"90": 0.36, "180": 0.25, "135": 0.222},
+    "#8": {"90": 0.41, "180": 0.30, "135": 0.254},
+    "#9": {"90": 0.49, "180": 0.34},
+    "#10": {"90": 0.54, "180": 0.40},
+    "#11": {"90": 0.59, "180": 0.43},
+    "#14": {"90": 0.80, "180": 0.445},
+    "#18": {"90": 1.03, "180": 0.572},
+}
+
 
 def rounded_rect_points(x_min, y_min, width, height, radius, segments=4):
     x_max = x_min + width
@@ -387,7 +402,11 @@ class RightInfoBoxRenderer:
         if max_height <= 0 or max_width <= 0:
             return
 
-        scale = 0.7 * min(max_width / template.width, max_height / template.height)
+        fit_scale = min(max_width / template.width, max_height / template.height)
+        if fit_scale <= 0:
+            return
+        base_scale = 0.7 * fit_scale
+        scale = min(base_scale * 1.3, fit_scale)
         if scale <= 0:
             self._draw_section_schematic_legacy(document, context, box_left, box_bottom, box_width, box_top, reference_y, data)
             return
@@ -396,7 +415,7 @@ class RightInfoBoxRenderer:
         target_left = box_left + (box_width - target_width) / 2.0
         offset = (
             target_left - template.min_x * scale,
-            schematic_bottom - template.min_y * scale,
+            schematic_bottom - template.min_y * scale + 250.0,
         )
 
         placeholders = self._section_placeholder_values(data)
@@ -410,24 +429,54 @@ class RightInfoBoxRenderer:
                 text_layer=context.layer("text"),
                 text_style=text_style.name,
                 placeholders=placeholders,
+                text_scale=2.0,
             )
         except Exception as exc:  # pragma: no cover - defensivo ante DXF inválido
             logger.warning("No se pudo instanciar el template de sección: %s", exc)
             self._draw_section_schematic_legacy(document, context, box_left, box_bottom, box_width, box_top, reference_y, data)
             return
 
+        filtered_entities: list[PolylineEntity | TextEntity] = []
+        gancho_entities: list[TextEntity] = []
+        rotate_placeholders = {"ALTURA_VIGA", "ALTURA_ESTRIBO"}
         for entity in entities:
+            placeholder_tag = None
+            if isinstance(entity, TextEntity):
+                placeholder_tag = entity.metadata.get("placeholder") if entity.metadata else None
+                if placeholder_tag in rotate_placeholders:
+                    entity.rotation = (entity.rotation or 0.0) + 90.0
+                if placeholder_tag == "GANCHO_ESTRIBO":
+                    gancho_entities.append(entity)
+                    continue
+            filtered_entities.append(entity)
+
+        if gancho_entities:
+            kept = min(gancho_entities, key=lambda ent: ent.insert[1])
+            filtered_entities.append(kept)
+
+        for entity in filtered_entities:
+            if isinstance(entity, TextEntity) and entity.metadata:
+                entity.metadata.pop("placeholder", None)
             document.add_entity(entity)
 
     def _section_placeholder_values(self, data):
+        hook_value = self._hook_length_value(data["stirrup_diameter"], data["hook_type"])
         return {
-            "BASE_VIGA": f"B = {data['base_mm'] / 1000:.2f} m",
-            "ALTURA_VIGA": f"H = {data['height_mm'] / 1000:.2f} m",
-            "BASE_ESTRIBO": f"b_e = {data['stirrup_width_mm'] / 1000:.2f} m",
-            "ALTURA_ESTRIBO": f"h_e = {data['stirrup_height_mm'] / 1000:.2f} m",
-            "GANCHO_ESTRIBO": f"Gancho {data['hook_type']}° - {data['stirrup_diameter']}",
-            "RECUBRIMIENTO": f"Recubrimiento = {data['cover_mm'] / 10:.0f} cm",
+            "BASE_VIGA": f"{data['base_mm'] / 1000:.2f}",
+            "ALTURA_VIGA": f"{data['height_mm'] / 1000:.2f}",
+            "BASE_ESTRIBO": f"{data['stirrup_width_mm'] / 1000:.2f}",
+            "ALTURA_ESTRIBO": f"{data['stirrup_height_mm'] / 1000:.2f}",
+            "GANCHO_ESTRIBO": f"{hook_value:.2f}" if hook_value is not None else "",
+            "RECUBRIMIENTO": f"{data['cover_mm'] / 10:.0f}",
         }
+
+    def _hook_length_value(self, diameter: str | None, hook_type: str | None) -> float | None:
+        if not diameter or not hook_type:
+            return None
+        table = HOOK_LENGTH_TABLE.get(diameter.strip())
+        if not table:
+            return None
+        return table.get(hook_type.strip())
 
     def _draw_section_schematic_legacy(
         self,
