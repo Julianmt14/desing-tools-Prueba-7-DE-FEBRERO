@@ -1259,6 +1259,9 @@ class BeamDetailingService(SegmentationMixin):
             end_hook = hook_length if hook_length and original_end >= total_length - cover - tolerance else 0.0
             total_with_hooks = straight_length + start_hook + end_hook
 
+            bar.start_hook_m = float(start_hook)
+            bar.end_hook_m = float(end_hook)
+
             if max_length > 0 and total_with_hooks > max_length + tolerance:
                 # Trim the straight portion so hooks do not push the bar beyond stock limits
                 allowed_straight = max(max_length - (start_hook + end_hook), 0.0)

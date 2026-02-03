@@ -23,6 +23,8 @@ class RebarDetail(BaseModel):
     splices: Optional[List[Dict[str, Any]]] = Field(None, description="Detalles de empalmes")
     hook_type: str = Field("135", description="Tipo de gancho: '90', '135', '180'")
     development_length_m: Optional[float] = Field(None, description="Longitud de desarrollo requerida")
+    start_hook_m: float = Field(0.0, ge=0.0, description="Longitud del gancho al inicio (m)")
+    end_hook_m: float = Field(0.0, ge=0.0, description="Longitud del gancho al final (m)")
     notes: Optional[str] = Field(None, description="Notas adicionales")
 
     @validator("position")

@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, List
 
-from app.modules.drawing.domain import LineEntity, PolylineEntity, TextEntity
+from app.modules.drawing.domain import DimensionEntity, LineEntity, PolylineEntity, TextEntity
 from app.modules.drawing.geometry import to_drawing_units
 from app.schemas.tools.despiece import RebarDetail
 
@@ -55,6 +55,7 @@ class RebarDrawer:
         layer_main = context.layer("rebar_main")
         layer_style = context.layer_style("rebar_main")
         text_style = context.template.text_style("labels")
+        dim_layer = context.layer("dimensions")
         lane_spacing = self._lane_spacing(context)
         family_spacing = self._family_spacing(context)
 
@@ -162,6 +163,7 @@ class RebarDrawer:
         assignments = self._assign_lanes(segments)
         family_stack_assignments = self._assign_family_stacks(segments)
         text_layer = context.layer("text")
+        dim_layer = context.layer("dimensions")
         text_offset = (12.0 if position == "top" else -18.0) * context.vertical_scale
         family_terminals: Dict[str, Dict[str, _PreparedBar]] = {}
         for segment in segments:
@@ -180,6 +182,7 @@ class RebarDrawer:
                 family_base_lane[segment.family_id] = lane_index
 
         geometry = context.payload.geometry
+        splice_registry: set[tuple] = set()
         for segment in segments:
             lane_index = assignments.get(segment.key, 0)
             family_base = family_base_lane.get(segment.family_id, lane_index)
@@ -215,6 +218,15 @@ class RebarDrawer:
                 draw_end=force_end,
             )
 
+            self._draw_splice_dimensions(
+                document,
+                context,
+                segment,
+                dim_layer=dim_layer,
+                position=position,
+                registry=splice_registry,
+            )
+
             label = f"{segment.quantity}Φ{bar.diameter} L={bar.length_m:.2f}m"
             mid_x = (segment.start_x + segment.end_x) / 2.0
             text_position = (mid_x, y + text_offset)
@@ -231,6 +243,61 @@ class RebarDrawer:
                         "align": "MIDDLE",
                         "align_point": text_position,
                     },
+                )
+            )
+
+    def _draw_splice_dimensions(
+        self,
+        document,
+        context,
+        segment: _PreparedBar,
+        *,
+        dim_layer: str,
+        position: str,
+        registry: set[tuple],
+    ) -> None:
+        splices = getattr(segment.bar, "splices", None) or []
+        if not splices:
+            return
+
+        offset_mm = self._scaled_value(70.0, context)
+        text_height = context.text_height_mm
+        dim_y = segment.y - offset_mm if position == "top" else segment.y + offset_mm
+        origin_x = context.origin[0]
+
+        for splice in splices:
+            start_m = splice.get("start_m") if isinstance(splice, dict) else None
+            end_m = splice.get("end_m") if isinstance(splice, dict) else None
+            if start_m is None and isinstance(splice, dict):
+                start_m = splice.get("start")
+            if end_m is None and isinstance(splice, dict):
+                end_m = splice.get("end")
+            if start_m is None or end_m is None:
+                continue
+            if end_m <= start_m:
+                continue
+
+            key = (round(start_m, 4), round(end_m, 4), position)
+            if key in registry:
+                continue
+            registry.add(key)
+
+            start_x = origin_x + to_drawing_units(start_m, document.units)
+            end_x = origin_x + to_drawing_units(end_m, document.units)
+            length_m = splice.get("length") if isinstance(splice, dict) else None
+            if length_m is None:
+                length_m = end_m - start_m
+            if length_m <= 0:
+                continue
+
+            document.add_entity(
+                DimensionEntity(
+                    layer=dim_layer,
+                    start=(start_x, dim_y),
+                    end=(end_x, dim_y),
+                    offset=10.0,
+                    text_override=f"{length_m:.2f}",
+                    metadata={"text_height": text_height},
                 )
             )
 
@@ -312,20 +379,21 @@ class RebarDrawer:
         if hook_type not in {"90", "135", "180"}:
             return
 
-        should_draw_start = draw_start and (
-            self._is_near_support(bar.start_m, geometry, position="start")
-            or self._notes_force_hook(bar, position="start")
-        )
-        should_draw_end = draw_end and (
-            self._is_near_support(bar.end_m, geometry, position="end")
-            or self._notes_force_hook(bar, position="end")
-        )
+        start_hook_m = float(getattr(bar, "start_hook_m", 0.0) or 0.0)
+        end_hook_m = float(getattr(bar, "end_hook_m", 0.0) or 0.0)
+
+        if draw_start and start_hook_m <= 0.0:
+            if self._is_near_support(bar.start_m, geometry, position="start") or self._notes_force_hook(bar, position="start"):
+                start_hook_m = self._lookup_hook_length_m(bar)
+
+        if draw_end and end_hook_m <= 0.0:
+            if self._is_near_support(bar.end_m, geometry, position="end") or self._notes_force_hook(bar, position="end"):
+                end_hook_m = self._lookup_hook_length_m(bar)
+
+        should_draw_start = draw_start and start_hook_m > 0.0
+        should_draw_end = draw_end and end_hook_m > 0.0
 
         if not should_draw_start and not should_draw_end:
-            return
-
-        hook_length = self._hook_length_mm(bar, context)
-        if hook_length <= 0:
             return
 
         vertical_clearance = self.lane_spacing_mm - self.family_spacing_mm
@@ -334,12 +402,40 @@ class RebarDrawer:
         y = segment.y
 
         actions = []
-        if should_draw_start:
-            actions.append((segment.start_x, 1))
-        if should_draw_end:
-            actions.append((segment.end_x, -1))
+        if should_draw_start and start_hook_m > 0:
+            start_length_mm = self._hook_length_mm(bar, context, length_override_m=start_hook_m)
+            if start_length_mm > 0:
+                actions.append((segment.start_x, 1, start_length_mm, start_hook_m))
+        if should_draw_end and end_hook_m > 0:
+            end_length_mm = self._hook_length_mm(bar, context, length_override_m=end_hook_m)
+            if end_length_mm > 0:
+                actions.append((segment.end_x, -1, end_length_mm, end_hook_m))
 
-        for origin_x, orientation in actions:
+        if not actions:
+            return
+
+        is_top = segment.bar.position == "top"
+
+        for origin_x, orientation, hook_length, hook_length_m in actions:
+            hook_origin_x = origin_x
+            hook_origin_y = y
+
+            if hook_type == "180":
+                aux_length = self._hook_length_mm(bar, context, length_override_m=0.09)
+                if aux_length > 0:
+                    aux_dir = -abs(aux_length) if is_top else abs(aux_length)
+                    delta_y = aux_dir
+                    aux_end = (origin_x, y + delta_y)
+                    document.add_entity(
+                        LineEntity(
+                            layer=layer,
+                            start=(origin_x, y),
+                            end=aux_end,
+                            color=layer_style.color if layer_style else None,
+                        )
+                    )
+                    hook_origin_y = aux_end[1]
+
             vector = self._hook_vector(hook_type, orientation)
             dx = hook_length * vector[0]
             dy = hook_length * vector[1] * direction
@@ -348,18 +444,18 @@ class RebarDrawer:
                 PolylineEntity(
                     layer=layer,
                     points=[
-                        (origin_x, y),
-                        (origin_x + dx * 0.35, y + dy * 0.5),
-                        (origin_x + dx, y + dy),
+                        (hook_origin_x, hook_origin_y),
+                        (hook_origin_x + dx * 0.35, hook_origin_y + dy * 0.5),
+                        (hook_origin_x + dx, hook_origin_y + dy),
                     ],
                     color=layer_style.color if layer_style else None,
                 )
             )
 
-            hook_text = f"{hook_length:.0f}"
+            hook_text = f"{hook_length_m:.2f}"
             text_layer = context.layer("text")
             text_style = context.template.text_style("labels")
-            text_pos = (origin_x + dx * 0.65, y + dy * 1.15)
+            text_pos = (hook_origin_x + dx * 0.65, hook_origin_y + dy * 1.15)
             document.add_entity(
                 TextEntity(
                     layer=text_layer,
@@ -373,14 +469,14 @@ class RebarDrawer:
     @staticmethod
     def _hook_vector(hook_type: str, orientation: int) -> tuple[float, float]:
         if hook_type == "180":
-            return (-orientation, 0.0)
+            return (orientation, 0.0)
         if hook_type == "90":
             return (0.0, orientation)
         # 135 default
         return (-orientation * 0.45, orientation * 0.85)
 
-    def _hook_length_mm(self, bar: RebarDetail, context) -> float:
-        length_m = self._lookup_hook_length_m(bar)
+    def _hook_length_mm(self, bar: RebarDetail, context, *, length_override_m: float | None = None) -> float:
+        length_m = length_override_m if length_override_m is not None else self._lookup_hook_length_m(bar)
         if length_m <= 0:
             return 0.0
         units = getattr(context.payload, "drawing_units", None)
