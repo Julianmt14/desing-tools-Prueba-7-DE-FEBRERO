@@ -185,8 +185,8 @@ const formatDimensionValue = (value) => {
 
 const defaultValues = {
   project_name: 'Centro Cultural La Estación',
-  beam_label: 'VIGA-E3-12',
-  element_identifier: 'VIGA-E3-12',
+  beam_label: 'VA 201',
+  element_identifier: 'VA 201',
   element_level: 3.52,
   element_quantity: 1,
   top_bars_config: [
@@ -206,10 +206,10 @@ const defaultValues = {
   hook_type: '180',
   cover_cm: 4,
   axis_supports: [
-    { label: 'EJE 3', support_width_cm: 35 },
-    { label: 'EJE 4', support_width_cm: 35 },
-    { label: 'EJE 5', support_width_cm: 35 },
-    { label: 'EJE 6', support_width_cm: 35 },
+    { label: 'A', support_width_cm: 35 },
+    { label: 'B', support_width_cm: 35 },
+    { label: 'C', support_width_cm: 35 },
+    { label: 'D', support_width_cm: 35 },
   ],
   span_count: 3,
   stirrups_config: [

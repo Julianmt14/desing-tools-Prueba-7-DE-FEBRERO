@@ -28,11 +28,11 @@ from app.schemas.tools.despiece import (
 def build_payload() -> BeamDrawingPayload:
     metadata = BeamDrawingMetadata(
         project_name="Centro Cultural",
-        beam_label="VIGA-E3-12",
-        element_identifier="VIGA-E3-12",
+        beam_label="VA 201",
+        element_identifier="VA 201",
         element_level=3.52,
         element_quantity=1,
-        axis_labels=["E1", "E2", "E3", "E4"],
+        axis_labels=["A", "B", "C", "D"],
         notes="Ensayo",
         concrete_strength="21 MPa (3000 psi)",
         reinforcement="420 MPa (Grado 60)",
@@ -40,9 +40,9 @@ def build_payload() -> BeamDrawingPayload:
     )
 
     supports = [
-        BeamSupport(index=0, label="E1", width_m=0.35, start_m=0.0, end_m=0.35),
-        BeamSupport(index=1, label="E2", width_m=0.35, start_m=4.35, end_m=4.70),
-        BeamSupport(index=2, label="E3", width_m=0.35, start_m=8.70, end_m=9.05),
+        BeamSupport(index=0, label="A", width_m=0.35, start_m=0.0, end_m=0.35),
+        BeamSupport(index=1, label="B", width_m=0.35, start_m=4.35, end_m=4.70),
+        BeamSupport(index=2, label="C", width_m=0.35, start_m=8.70, end_m=9.05),
     ]
 
     spans = [

@@ -409,9 +409,18 @@ def _safe_float(value: float | Decimal | None) -> float | None:
 
 def _axis_labels(axis_numbering: str | None, expected: int) -> list[str]:
     if axis_numbering:
-        raw_tokens = re.split(r"[-,\s]+", axis_numbering)
-        labels = [token for token in raw_tokens if token]
-        if len(labels) >= expected:
-            return labels[:expected]
+        normalized = axis_numbering.strip()
+        if normalized:
+            sanitized = normalized.replace("\u00b7", ",")
+            pattern = r"\s*(?:[-,;|/]|(?:\r?\n))\s*"
+            raw_tokens = re.split(pattern, sanitized)
+            labels = [token.strip() for token in raw_tokens if token.strip()]
+            if len(labels) >= expected:
+                return labels[:expected]
+            if labels:
+                last_label = labels[-1]
+                while len(labels) < expected:
+                    labels.append(last_label)
+                return labels[:expected]
 
     return [f"EJE {index + 1}" for index in range(expected)]

@@ -60,6 +60,7 @@ class BeamRenderer:
         axis_layer = context.layer("axes")
         text_style = context.template.text_style("labels")
         style = context.layer_style("axes")
+        text_layer = context.layer("text")
         extension_top = 25.0 * context.vertical_scale
         extension_bottom = 35.0 * context.vertical_scale
         label_offset = 10.0 * context.vertical_scale
@@ -67,6 +68,7 @@ class BeamRenderer:
             x = context.origin[0] + to_drawing_units(marker.position_m, document.units)
             top = context.origin[1] + context.beam_height_mm + extension_top
             bottom = context.origin[1] - extension_bottom
+            label_point = (x, top + label_offset)
             document.add_entity(
                 PolylineEntity(
                     layer=axis_layer,
@@ -77,11 +79,15 @@ class BeamRenderer:
             )
             document.add_entity(
                 TextEntity(
-                    layer=context.layer("text"),
+                    layer=text_layer,
                     content=marker.label,
-                    insert=(x - 5.0, top + label_offset),
+                    insert=label_point,
                     height=context.text_height_mm,
                     style=text_style.name,
+                    metadata={
+                        "halign": 1,
+                        "align_point": label_point,
+                    },
                 )
             )
 

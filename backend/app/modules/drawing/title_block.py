@@ -133,17 +133,17 @@ class TitleBlockRenderer:
         ]
 
         padding_y = 220.0
-        line_spacing = 400.0
-        cursor_y = top_y - padding_y
-        text_positions: list[tuple[str, float]] = []
-        top_lines = lines[:2]
-        for idx, line in enumerate(top_lines):
-            text_positions.append((line, cursor_y - idx * line_spacing - 100.0))
-
+        beam_label_y = top_y - padding_y - 100.0
+        level_y = top - (height * 0.30)
+        section_y = bottom + (height * 0.30)
         quantity_y = bottom + 250.0
-        section_y = quantity_y + 250.0
-        text_positions.append((lines[2], section_y))
-        text_positions.append((lines[3], quantity_y))
+
+        text_positions: list[tuple[str, float]] = [
+            (lines[0], beam_label_y),
+            (lines[1], level_y),
+            (lines[2], section_y),
+            (lines[3], quantity_y),
+        ]
 
         for content, pos_y in text_positions:
             insert_point = (origin_x + width / 2.0, pos_y)
