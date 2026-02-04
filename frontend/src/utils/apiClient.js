@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { getAccessToken, refreshAccessToken, clearTokens } from './auth';
 
+// En producción usa la variable de entorno, en desarrollo usa el proxy de Vite
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -15,7 +18,9 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-const apiClient = axios.create();
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+});
 
 apiClient.interceptors.request.use(
   async (config) => {
