@@ -140,6 +140,7 @@ def get_job_for_user(db: Session, *, job_id: str, user_id: int) -> models.Design
 
 
 def serialize_export_job(job: models.DesignExport) -> dict:
+    job_id_str = str(job.job_id) if job.job_id else None
     return {
         "job_id": job.job_id,
         "design_id": job.design_id,
@@ -151,8 +152,8 @@ def serialize_export_job(job: models.DesignExport) -> dict:
         "status": job.status,
         "file_path": job.file_path,
         "preview_path": job.preview_path,
-        "download_url": _path_to_url(job.file_path),
-        "preview_url": _path_to_url(job.preview_path),
+        "download_url": _path_to_url(job.file_path, job_id_str),
+        "preview_url": _path_to_url(job.preview_path, job_id_str),
         "expires_at": job.expires_at,
         "message": job.message,
         "created_at": job.created_at,
@@ -242,14 +243,12 @@ def _save_document_to_disk(
     raise RuntimeError(f"Formato no soportado: {request.format}")
 
 
-def _path_to_url(path_str: str | None) -> str | None:
-    if not path_str:
+def _path_to_url(path_str: str | None, job_id: str | None = None) -> str | None:
+    """Genera la URL de descarga a través de la API."""
+    if not path_str or not job_id:
         return None
-    path = Path(path_str)
-    try:
-        return path.resolve().as_uri()
-    except OSError:
-        return None
+    # Retorna la URL relativa del endpoint de descarga
+    return f"/api/v1/drawing/exports/{job_id}/download"
 
 
 def _format_extension(draw_format: str) -> str:
