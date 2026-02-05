@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useDespieceExport } from '../../hooks/useDespieceExport';
+import { getAccessToken } from '../../utils/auth';
 
 // URL base del API para las descargas
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -51,6 +52,43 @@ const getFullDownloadUrl = (downloadUrl) => {
   }
   // Si es relativa, agrega la base del API
   return `${API_BASE_URL}${downloadUrl}`;
+};
+
+// Función para descargar archivo con autenticación
+const handleDownloadFile = async (downloadUrl, filename) => {
+  const fullUrl = getFullDownloadUrl(downloadUrl);
+  if (!fullUrl) {
+    toast.error('URL de descarga no disponible');
+    return;
+  }
+
+  try {
+    const token = getAccessToken();
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'archivo';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    toast.success('Archivo descargado');
+  } catch (error) {
+    console.error('Error descargando archivo:', error);
+    toast.error('Error al descargar el archivo');
+  }
 };
 
 const DespieceExportPanel = ({ designId, projectName, beamLabel, lastSavedAt }) => {
@@ -279,14 +317,13 @@ const DespieceExportPanel = ({ designId, projectName, beamLabel, lastSavedAt }) 
                 ) : null}
                 <div className="flex flex-wrap gap-2 text-xs">
                   {job.download_url ? (
-                    <a
-                      href={getFullDownloadUrl(job.download_url)}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadFile(job.download_url, `${beamLabel || 'plano'}.${job.format}`)}
                       className="px-3 py-1 rounded-xl border border-slate-700 text-slate-200 hover:border-primary/60"
                     >
                       Descargar
-                    </a>
+                    </button>
                   ) : null}
                   {job.file_path ? (
                     <button
