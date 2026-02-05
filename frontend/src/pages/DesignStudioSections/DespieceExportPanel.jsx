@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useDespieceExport } from '../../hooks/useDespieceExport';
 
+// URL base del API para las descargas
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 const FORMAT_OPTIONS = [
   { value: 'dwg', label: 'DWG' },
   { value: 'dxf', label: 'DXF' },
@@ -37,6 +40,17 @@ const formatDate = (value) => {
     return '—';
   }
   return date.toLocaleString('es-CO');
+};
+
+// Construye la URL completa de descarga
+const getFullDownloadUrl = (downloadUrl) => {
+  if (!downloadUrl) return null;
+  // Si ya es una URL absoluta, la devuelve tal cual
+  if (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://')) {
+    return downloadUrl;
+  }
+  // Si es relativa, agrega la base del API
+  return `${API_BASE_URL}${downloadUrl}`;
 };
 
 const DespieceExportPanel = ({ designId, projectName, beamLabel, lastSavedAt }) => {
@@ -266,7 +280,7 @@ const DespieceExportPanel = ({ designId, projectName, beamLabel, lastSavedAt }) 
                 <div className="flex flex-wrap gap-2 text-xs">
                   {job.download_url ? (
                     <a
-                      href={job.download_url}
+                      href={getFullDownloadUrl(job.download_url)}
                       target="_blank"
                       rel="noreferrer"
                       className="px-3 py-1 rounded-xl border border-slate-700 text-slate-200 hover:border-primary/60"
