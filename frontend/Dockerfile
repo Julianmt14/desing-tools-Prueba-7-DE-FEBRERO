@@ -9,7 +9,10 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine
 WORKDIR /app
-RUN npm install -g serve
+RUN npm install -g serve@14
 COPY --from=build /app/build ./build
+ENV PORT=3000
 EXPOSE 3000
-CMD ["serve", "-s", "build", "-l", "3000"]
+CMD ["sh", "-c", "serve -s build -p $PORT"]
+
+
