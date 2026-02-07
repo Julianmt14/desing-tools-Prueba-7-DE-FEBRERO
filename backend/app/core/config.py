@@ -1,7 +1,6 @@
 from typing import Optional
 from urllib.parse import quote_plus
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,8 +25,8 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 30
     refresh_token_expire_minutes: int = 60 * 24 * 7  # 7 días
-    cors_origins: list[str] = ["http://localhost:3001"]
-    allowed_origins: Optional[list[str]] = None
+    cors_origins: str = "http://localhost:3001"
+    allowed_origins: Optional[str] = None
 
     DETALING_MAX_RECURSION_DEPTH: int = 10
     DETALING_COMPUTATION_TIMEOUT: int = 30  # segundos
@@ -38,21 +37,6 @@ class Settings(BaseSettings):
     NSR10_MIN_CONTINUOUS_BARS: int = 2
     NSR10_NO_SPLICE_ZONE_FACTOR: float = 2.0
     NSR10_MIN_POSITIVE_IN_SUPPORTS: float = 0.33
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def split_cors(cls, value):  # noqa: D401
-        """Permite configurar orígenes como cadena separada por comas."""
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
-
-    @field_validator("allowed_origins", mode="before")
-    @classmethod
-    def split_allowed(cls, value):
-        if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
 
     @property
     def sqlalchemy_database_uri(self) -> str:
@@ -69,6 +53,12 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return self.allowed_origins or self.cors_origins
+        """Retorna lista de orígenes CORS, soporta string separado por comas."""
+        origins_str = self.allowed_origins or self.cors_origins
+        if not origins_str:
+            return ["http://localhost:3001"]
+        return [origin.strip() for origin in origins_str.split(",") if origin.strip()]
+
 
 settings = Settings()
+
